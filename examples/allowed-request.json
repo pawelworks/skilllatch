@@ -1,0 +1,7 @@
+{
+  "session_id": "demo-session",
+  "task_id": "soup-question",
+  "kind": "file",
+  "action": "read",
+  "path": "recipes/soup.txt"
+}

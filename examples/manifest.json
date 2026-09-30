@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skill": {
+    "name": "chef-helper",
+    "digest": "sha256:d9b9ac64610814527c8a51c86dc34bfffa7db2c049b605a14fbcf939e5adc6e9"
+  },
+  "capabilities": {
+    "files": {
+      "read": [{"path": "recipes", "recursive": true}],
+      "write": [{"path": "notes", "recursive": true}]
+    },
+    "network": ["https://recipes.example"],
+    "commands": [["git", "status", "--short"]]
+  }
+}
