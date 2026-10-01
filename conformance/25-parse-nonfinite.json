@@ -1,0 +1,8 @@
+{
+  "name": "25-parse-nonfinite",
+  "description": "Strict parsing rejects a nonfinite number such as 1e400.",
+  "parse_check": {
+    "content": "{\"value\": 1e400}",
+    "expect_reason_code": "invalid_json_value"
+  }
+}

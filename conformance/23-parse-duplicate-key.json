@@ -1,0 +1,8 @@
+{
+  "name": "23-parse-duplicate-key",
+  "description": "Strict parsing rejects an object with a duplicated key.",
+  "parse_check": {
+    "content": "{\"version\": 1, \"version\": 2}",
+    "expect_reason_code": "duplicate_json_key"
+  }
+}

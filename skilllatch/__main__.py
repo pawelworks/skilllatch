@@ -17,6 +17,13 @@ from .core import (
     load_json_file,
 )
 
+USAGE_ERROR = 64
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
+
 
 def _at(value: str) -> datetime:
     try:
@@ -28,7 +35,7 @@ def _at(value: str) -> datetime:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="skilllatch")
+    parser = _Parser(prog="skilllatch")
     commands = parser.add_subparsers(dest="command", required=True)
     digest = commands.add_parser("digest", help="hash an immutable skill directory")
     digest.add_argument("--skill-dir", required=True, type=Path)
@@ -41,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--at", type=_at, help="diagnostic clock override; the host must own this value"
     )
+    check.add_argument(
+        "--workspace-id",
+        default=None,
+        help="host-observed workspace identity checked against a pinned grant",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "digest":
@@ -49,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except PolicyError as exc:
             print(f"{exc.code}: {exc.reason}", file=sys.stderr)
-            return 2
+            return 3
 
     when = args.at or datetime.now(UTC)
     inputs: dict[str, object] = {"manifest": None, "grant": None, "request": None}
@@ -63,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             inputs["grant"],
             inputs["request"],
             at=when,
+            workspace_id=args.workspace_id,
         )
     except PolicyError as exc:
         result = _decision(
@@ -74,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             inputs["grant"],
             inputs["request"],
             None,
+            args.workspace_id,
+            "unpinned" if args.workspace_id is not None else "none",
         )
     print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
     return 0 if result["allowed"] else 2

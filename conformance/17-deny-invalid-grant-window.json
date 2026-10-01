@@ -1,0 +1,89 @@
+{
+  "name": "17-deny-invalid-grant-window",
+  "description": "A grant lifetime beyond 24 hours is denied.",
+  "setup": {
+    "skill_files": {
+      "SKILL.md": "# Conformance skill\n"
+    },
+    "workspace_files": {
+      "recipes/soup.txt": "soup\n",
+      "private.txt": "private\n"
+    }
+  },
+  "manifest": {
+    "version": 1,
+    "skill": {
+      "name": "conf-skill",
+      "digest": "__SKILL_DIGEST__"
+    },
+    "capabilities": {
+      "files": {
+        "read": [
+          {
+            "path": "recipes",
+            "recursive": true
+          }
+        ],
+        "write": [
+          {
+            "path": "notes",
+            "recursive": true
+          }
+        ]
+      },
+      "network": [
+        "https://recipes.example"
+      ],
+      "commands": [
+        [
+          "git",
+          "status",
+          "--short"
+        ]
+      ]
+    }
+  },
+  "grant": {
+    "version": 2,
+    "session_id": "conf-session",
+    "task_id": "conf-task",
+    "skill_digest": "__SKILL_DIGEST__",
+    "workspace_id": "conf-ws",
+    "issued_at": "2026-10-01T11:00:00Z",
+    "expires_at": "2026-10-03T12:00:00Z",
+    "capabilities": {
+      "files": {
+        "read": [
+          {
+            "path": "recipes",
+            "recursive": true
+          }
+        ],
+        "write": []
+      },
+      "network": [
+        "https://recipes.example"
+      ],
+      "commands": [
+        [
+          "git",
+          "status",
+          "--short"
+        ]
+      ]
+    }
+  },
+  "request": {
+    "session_id": "conf-session",
+    "task_id": "conf-task",
+    "kind": "file",
+    "action": "read",
+    "path": "recipes/soup.txt"
+  },
+  "at": "2026-10-01T12:00:00Z",
+  "workspace_id": "conf-ws",
+  "expect": {
+    "allowed": false,
+    "reason_code": "invalid_grant_window"
+  }
+}

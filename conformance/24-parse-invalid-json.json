@@ -1,0 +1,8 @@
+{
+  "name": "24-parse-invalid-json",
+  "description": "Strict parsing rejects a truncated JSON document.",
+  "parse_check": {
+    "content": "{\"version\": 1",
+    "expect_reason_code": "invalid_json_file"
+  }
+}

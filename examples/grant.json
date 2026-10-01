@@ -1,8 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "session_id": "demo-session",
   "task_id": "soup-question",
   "skill_digest": "sha256:d9b9ac64610814527c8a51c86dc34bfffa7db2c049b605a14fbcf939e5adc6e9",
+  "workspace_id": "chef-demo-workspace",
   "issued_at": "2026-10-01T00:00:00Z",
   "expires_at": "2026-10-02T00:00:00Z",
   "capabilities": {

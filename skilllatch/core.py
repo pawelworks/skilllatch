@@ -92,7 +92,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise PolicyError("duplicate_json_key", f"duplicate JSON key: {key}")
+            raise PolicyError("duplicate_json_key", f"duplicate JSON key: {key!r}")
         result[key] = value
     return result
 
@@ -157,9 +157,12 @@ def _string(value: Any, label: str) -> str:
     return value
 
 
-def _version(value: Any) -> None:
-    if type(value) is not int or value != 1:
-        raise PolicyError("unsupported_version", "version must be 1")
+def _version(value: Any, allowed: set[int], label: str) -> None:
+    if type(value) is not int or value not in allowed:
+        raise PolicyError(
+            "unsupported_version",
+            f"{label} version must be one of: {', '.join(map(str, sorted(allowed)))}",
+        )
 
 
 def _digest(value: Any, label: str) -> str:
@@ -289,7 +292,7 @@ def _parse_time(value: Any, label: str) -> datetime:
 
 def _parse_manifest(value: Any) -> tuple[str, dict[str, Any]]:
     manifest = _object(value, {"version", "skill", "capabilities"}, "manifest")
-    _version(manifest["version"])
+    _version(manifest["version"], {1}, "manifest")
     skill = _object(manifest["skill"], {"name", "digest"}, "manifest skill")
     _string(skill["name"], "skill name")
     return _digest(skill["digest"], "skill digest"), _capabilities(
@@ -299,21 +302,29 @@ def _parse_manifest(value: Any) -> tuple[str, dict[str, Any]]:
 
 def _parse_grant(
     value: Any,
-) -> tuple[str, str, str, datetime, datetime, dict[str, Any]]:
-    grant = _object(
-        value,
-        {
-            "version",
-            "session_id",
-            "task_id",
-            "skill_digest",
-            "issued_at",
-            "expires_at",
-            "capabilities",
-        },
-        "grant",
-    )
-    _version(grant["version"])
+) -> tuple[str, str, str, str | None, datetime, datetime, dict[str, Any]]:
+    if not isinstance(value, dict):
+        raise PolicyError(
+            "invalid_schema",
+            "grant must have exactly: capabilities, expires_at, issued_at, "
+            "session_id, skill_digest, task_id, version",
+        )
+    common = {
+        "version",
+        "session_id",
+        "task_id",
+        "skill_digest",
+        "issued_at",
+        "expires_at",
+        "capabilities",
+    }
+    _version(value.get("version"), {1, 2}, "grant")
+    if value["version"] == 1:
+        grant = _object(value, common, "grant")
+        workspace_id: str | None = None
+    else:
+        grant = _object(value, common | {"workspace_id"}, "grant")
+        workspace_id = _string(grant["workspace_id"], "workspace_id")
     issued = _parse_time(grant["issued_at"], "issued_at")
     expires = _parse_time(grant["expires_at"], "expires_at")
     if expires <= issued or expires - issued > _MAX_GRANT_LIFETIME:
@@ -325,6 +336,7 @@ def _parse_grant(
         _string(grant["session_id"], "session_id"),
         _string(grant["task_id"], "task_id"),
         _digest(grant["skill_digest"], "grant skill_digest"),
+        workspace_id,
         issued,
         expires,
         _capabilities(grant["capabilities"]),
@@ -462,6 +474,17 @@ def _safe_workspace_path(workspace: str | Path, path: tuple[str, ...]) -> None:
         resolved_target = current.resolve(strict=False)
         if not resolved_target.is_relative_to(resolved_root):
             raise PolicyError("unsafe_file_path", "file path escapes workspace")
+        try:
+            if current.is_file() and current.lstat().st_nlink != 1:
+                raise PolicyError(
+                    "unsafe_file_path", "file has multiple hard links"
+                )
+        except PolicyError:
+            raise
+        except OSError as exc:
+            raise PolicyError(
+                "unsafe_file_path", "file path could not be checked safely"
+            ) from exc
     except PolicyError:
         raise
     except OSError as exc:
@@ -517,14 +540,18 @@ def _decision(
     grant: Any,
     request: Any,
     skill_digest: str | None,
+    workspace_id: str | None = None,
+    workspace_binding: str = "none",
 ) -> dict[str, Any]:
     receipt = {
-        "version": 1,
+        "version": 2,
         "allowed": allowed,
         "reason_code": code,
         "reason": reason,
         "evaluated_at": when.isoformat().replace("+00:00", "Z"),
         "skill_digest": skill_digest,
+        "workspace_id": workspace_id,
+        "workspace_binding": workspace_binding,
         "manifest_hash": _sha256(manifest),
         "grant_hash": _sha256(grant),
         "request_hash": _sha256(request),
@@ -546,12 +573,22 @@ def evaluate(
     request: Any,
     *,
     at: datetime | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Decide one host-supplied tool call; never execute it.
+
+    IMPORTANT: library callers must treat a raised PolicyError as a denial.
+    Malformed direct Python values (non-JSON values, nonfinite floats) and an
+    invalid clock RAISE PolicyError instead of returning a denial receipt.
+    Valid JSON-shaped inputs always produce an allow/deny decision receipt.
 
     All mutable inputs and the clock must be supplied by a trusted host. An
     allow decision is valid only for the exact request and skill snapshot in
     the receipt, and only if the host gates the actual invocation.
+
+    ``workspace_id`` is the host-observed identity of the active workspace.
+    A version 2 grant pins one workspace identity; evaluating it against a
+    different (or missing) host value denies with ``workspace_mismatch``.
     """
     # Direct callers may pass Python objects instead of parsed JSON. Reject
     # nonfinite floats and other non-JSON values before constructing a receipt.
@@ -559,12 +596,21 @@ def evaluate(
         _canonical_bytes(value)
     when = _utc_time(at)
     skill_digest: str | None = None
+    grant_workspace_id: str | None = None
     try:
+        if workspace_id is not None:
+            _string(workspace_id, "workspace_id")
         skill_digest = hash_skill_tree(skill_dir)
         manifest_digest, declared = _parse_manifest(manifest)
-        session_id, task_id, grant_digest, issued, expires, granted = _parse_grant(
-            grant
-        )
+        (
+            session_id,
+            task_id,
+            grant_digest,
+            grant_workspace_id,
+            issued,
+            expires,
+            granted,
+        ) = _parse_grant(grant)
         req_session, req_task, kind, target = _request(request, workspace)
         if skill_digest != manifest_digest or skill_digest != grant_digest:
             raise PolicyError(
@@ -583,6 +629,10 @@ def evaluate(
             raise PolicyError(
                 "scope_mismatch", "request session or task does not match grant"
             )
+        if grant_workspace_id is not None and grant_workspace_id != workspace_id:
+            raise PolicyError(
+                "workspace_mismatch", "grant is pinned to a different workspace"
+            )
         if kind == "file":
             action, path = target
             if not any(_within_rule(path, rule) for rule in granted["files"][action]):
@@ -600,9 +650,29 @@ def evaluate(
                 "capability_not_granted", "exact command argv is not granted"
             )
     except PolicyError as exc:
+        if grant_workspace_id is not None:
+            binding = "pinned"
+        elif workspace_id is not None:
+            binding = "unpinned"
+        else:
+            binding = "none"
         return _decision(
-            False, exc.code, exc.reason, when, manifest, grant, request, skill_digest
+            False,
+            exc.code,
+            exc.reason,
+            when,
+            manifest,
+            grant,
+            request,
+            skill_digest,
+            workspace_id,
+            binding,
         )
+    binding = (
+        "pinned"
+        if grant_workspace_id is not None
+        else ("unpinned" if workspace_id is not None else "none")
+    )
     return _decision(
         True,
         "allowed",
@@ -612,4 +682,6 @@ def evaluate(
         grant,
         request,
         skill_digest,
+        workspace_id,
+        binding,
     )

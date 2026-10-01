@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -42,10 +43,11 @@ class SkillLatchTests(unittest.TestCase):
             },
         }
         self.grant = {
-            "version": 1,
+            "version": 2,
             "session_id": "session-1",
             "task_id": "task-1",
             "skill_digest": digest,
+            "workspace_id": "test-workspace",
             "issued_at": "2026-10-01T11:00:00Z",
             "expires_at": "2026-10-01T13:00:00Z",
             "capabilities": {
@@ -61,7 +63,7 @@ class SkillLatchTests(unittest.TestCase):
     def request(self, **kwargs):
         return {"session_id": "session-1", "task_id": "task-1", **kwargs}
 
-    def decide(self, request, *, manifest=None, grant=None, at=AT):
+    def decide(self, request, *, manifest=None, grant=None, at=AT, workspace_id="test-workspace"):
         return evaluate(
             self.skill,
             self.workspace,
@@ -69,7 +71,13 @@ class SkillLatchTests(unittest.TestCase):
             self.grant if grant is None else grant,
             request,
             at=at,
+            workspace_id=workspace_id,
         )
+
+    def legacy_grant(self):
+        grant = {key: value for key, value in self.grant.items() if key != "workspace_id"}
+        grant["version"] = 1
+        return grant
 
     def test_narrow_file_grant_allows_only_selected_read(self):
         allowed = self.decide(
@@ -194,6 +202,65 @@ class SkillLatchTests(unittest.TestCase):
                     self.decide(request, grant=grant)["reason_code"], "invalid_time"
                 )
 
+    def test_v1_grant_without_host_workspace_id_is_allowed_with_binding_none(self):
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            grant=self.legacy_grant(),
+            workspace_id=None,
+        )
+        self.assertTrue(result["allowed"])
+        self.assertEqual(result["receipt"]["workspace_binding"], "none")
+        self.assertIsNone(result["receipt"]["workspace_id"])
+
+    def test_v1_grant_with_host_workspace_id_is_unpinned(self):
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            grant=self.legacy_grant(),
+            workspace_id="test-workspace",
+        )
+        self.assertTrue(result["allowed"])
+        self.assertEqual(result["receipt"]["workspace_binding"], "unpinned")
+        self.assertEqual(result["receipt"]["workspace_id"], "test-workspace")
+
+    def test_v2_grant_requires_the_pinned_workspace_id(self):
+        request = self.request(kind="file", action="read", path="recipes/soup.txt")
+        for host_id in ("other-workspace", None):
+            with self.subTest(host_id=host_id):
+                result = self.decide(request, workspace_id=host_id)
+                self.assertEqual(result["reason_code"], "workspace_mismatch")
+                self.assertFalse(result["allowed"])
+
+    def test_v2_grant_replayed_on_second_physical_workspace_is_denied(self):
+        second = self.root / "workspace-b"
+        (second / "recipes").mkdir(parents=True)
+        (second / "recipes" / "soup.txt").write_text("soup\n", encoding="utf-8")
+        result = evaluate(
+            self.skill,
+            second,
+            self.manifest,
+            self.grant,
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            at=AT,
+            workspace_id="workspace-b",
+        )
+        self.assertEqual(result["reason_code"], "workspace_mismatch")
+
+    def test_grant_version_3_is_unsupported(self):
+        grant = copy.deepcopy(self.grant)
+        grant["version"] = 3
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            grant=grant,
+        )
+        self.assertEqual(result["reason_code"], "unsupported_version")
+
+    def test_malformed_host_workspace_id_is_invalid_schema(self):
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            workspace_id="bad\nid",
+        )
+        self.assertEqual(result["reason_code"], "invalid_schema")
+
     def test_traversal_absolute_and_windows_aliases_are_denied(self):
         for path in (
             "../private.txt",
@@ -233,6 +300,24 @@ class SkillLatchTests(unittest.TestCase):
         )
         self.assertEqual(result["reason_code"], "unsafe_file_path")
 
+    def test_hard_link_alias_is_denied(self):
+        try:
+            os.link(
+                self.workspace / "private.txt",
+                self.workspace / "recipes" / "alias.txt",
+            )
+        except (OSError, NotImplementedError):
+            self.skipTest("hard link creation is not available")
+        grant = copy.deepcopy(self.grant)
+        grant["capabilities"]["files"]["read"] = [
+            {"path": "recipes", "recursive": True}
+        ]
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/alias.txt"),
+            grant=grant,
+        )
+        self.assertEqual(result["reason_code"], "unsafe_file_path")
+
     def test_reparse_point_check_denies_link_path_without_os_privileges(self):
         target = self.workspace / "recipes" / "alias.txt"
         target.write_text("test\n", encoding="utf-8")
@@ -262,6 +347,15 @@ class SkillLatchTests(unittest.TestCase):
         with self.assertRaises(PolicyError) as error:
             hash_skill_tree(self.skill)
         self.assertEqual(error.exception.code, "invalid_skill_tree")
+
+    def test_receipt_is_version_2_and_deterministic(self):
+        request = self.request(kind="file", action="read", path="recipes/soup.txt")
+        one = self.decide(request)
+        two = self.decide(copy.deepcopy(request))
+        self.assertEqual(one, two)
+        self.assertEqual(one["receipt"]["version"], 2)
+        self.assertEqual(one["receipt"]["workspace_id"], "test-workspace")
+        self.assertEqual(one["receipt"]["workspace_binding"], "pinned")
 
     def test_receipt_is_deterministic_and_bound_to_request(self):
         request = self.request(kind="file", action="read", path="recipes/soup.txt")
@@ -371,6 +465,8 @@ class ExampleCliTests(unittest.TestCase):
             str(examples / "grant.json"),
             "--at",
             "2026-10-01T12:00:00Z",
+            "--workspace-id",
+            "chef-demo-workspace",
         ]
         allowed = subprocess.run(
             common + ["--request", str(examples / "allowed-request.json")],
@@ -390,8 +486,69 @@ class ExampleCliTests(unittest.TestCase):
         self.assertEqual(denied.returncode, 2, denied.stderr)
         self.assertTrue(json.loads(allowed.stdout)["allowed"])
         self.assertEqual(
+            json.loads(allowed.stdout)["receipt"]["workspace_binding"], "pinned"
+        )
+        self.assertEqual(
             json.loads(denied.stdout)["reason_code"], "capability_not_granted"
         )
+
+    def test_pinned_grant_replay_without_workspace_id_is_denied(self):
+        examples = PROJECT / "examples"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "skilllatch",
+                "check",
+                "--skill-dir",
+                str(examples / "chef-helper"),
+                "--workspace",
+                str(examples / "workspace"),
+                "--manifest",
+                str(examples / "manifest.json"),
+                "--grant",
+                str(examples / "grant.json"),
+                "--request",
+                str(examples / "allowed-request.json"),
+                "--at",
+                "2026-10-01T12:00:00Z",
+            ],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout)["reason_code"], "workspace_mismatch"
+        )
+
+    def test_usage_and_engine_error_exit_codes_are_distinct(self):
+        examples = PROJECT / "examples"
+        usage = subprocess.run(
+            [sys.executable, "-m", "skilllatch", "check"],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(usage.returncode, 64, usage.stderr)
+        engine = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "skilllatch",
+                "digest",
+                "--skill-dir",
+                str(examples / "manifest.json"),
+            ],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(engine.returncode, 3, engine.stderr)
+        self.assertIn("invalid_skill_tree", engine.stderr)
 
     def test_malformed_json_requests_fail_closed_with_structured_denial(self):
         examples = PROJECT / "examples"
@@ -421,6 +578,8 @@ class ExampleCliTests(unittest.TestCase):
                             str(request_file),
                             "--at",
                             "2026-10-01T12:00:00Z",
+                            "--workspace-id",
+                            "chef-demo-workspace",
                         ],
                         cwd=PROJECT,
                         capture_output=True,

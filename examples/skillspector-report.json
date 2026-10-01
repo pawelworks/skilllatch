@@ -1,0 +1,37 @@
+{
+  "_note": "Illustrative fabricated fixture, not real SkillSpector output. Real reports do not carry a subject_digest field; it is included here to demonstrate digest verification.",
+  "tool": "skillspector",
+  "scan_mode": "static+llm",
+  "subject_digest": "sha256:d9b9ac64610814527c8a51c86dc34bfffa7db2c049b605a14fbcf939e5adc6e9",
+  "skill": {
+    "name": "chef-helper",
+    "source": "local",
+    "scanned_at": "2026-10-01T10:00:00Z"
+  },
+  "risk_assessment": {
+    "score": 12,
+    "severity": "LOW",
+    "recommendation": "SAFE"
+  },
+  "components": [
+    {
+      "path": "SKILL.md",
+      "type": "markdown",
+      "lines": 4,
+      "executable": false,
+      "size_bytes": 215
+    }
+  ],
+  "issues": [],
+  "metadata": {
+    "has_executable_scripts": false,
+    "skillspector_version": "2.12.0",
+    "llm_requested": true,
+    "llm_available": true
+  },
+  "coverage": {
+    "files_scanned": 1,
+    "files_total": 1,
+    "is_complete": true
+  }
+}
