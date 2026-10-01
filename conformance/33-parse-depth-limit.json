@@ -1,0 +1,8 @@
+{
+  "name": "33-parse-depth-limit",
+  "description": "Strict parsing rejects JSON nested deeper than 100 levels.",
+  "parse_check": {
+    "content": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "expect_reason_code": "limit_exceeded"
+  }
+}

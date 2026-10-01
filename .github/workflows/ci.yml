@@ -23,5 +23,19 @@ jobs:
       - run: python -m pip install -e .
       - run: python -m unittest discover -s tests -v
       - run: python examples/demo.py --quiet
+      - run: python examples/benchmark.py
+      - run: python -m unittest discover -s tests -q
+        env:
+          PYTHONHASHSEED: "12345"
       - run: python -m skilllatch digest --skill-dir examples/chef-helper
       - run: python -m skilllatch check --skill-dir examples/chef-helper --workspace examples/workspace --manifest examples/manifest.json --grant examples/grant.json --request examples/allowed-request.json --at 2026-10-01T12:00:00Z --workspace-id chef-demo-workspace
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install ruff
+      - run: ruff check .

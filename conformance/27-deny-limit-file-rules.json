@@ -1,0 +1,1113 @@
+{
+  "name": "27-deny-limit-file-rules",
+  "description": "A grant with more than 256 file rules for one action is denied with limit_exceeded.",
+  "setup": {
+    "skill_files": {
+      "SKILL.md": "# Conformance skill\n"
+    },
+    "workspace_files": {
+      "recipes/soup.txt": "soup\n",
+      "private.txt": "private\n"
+    }
+  },
+  "manifest": {
+    "version": 1,
+    "skill": {
+      "name": "conf-skill",
+      "digest": "__SKILL_DIGEST__"
+    },
+    "capabilities": {
+      "files": {
+        "read": [
+          {
+            "path": "recipes",
+            "recursive": true
+          }
+        ],
+        "write": [
+          {
+            "path": "notes",
+            "recursive": true
+          }
+        ]
+      },
+      "network": [
+        "https://recipes.example"
+      ],
+      "commands": [
+        [
+          "git",
+          "status",
+          "--short"
+        ]
+      ]
+    }
+  },
+  "grant": {
+    "version": 2,
+    "session_id": "conf-session",
+    "task_id": "conf-task",
+    "skill_digest": "__SKILL_DIGEST__",
+    "workspace_id": "conf-ws",
+    "issued_at": "2026-10-01T11:00:00Z",
+    "expires_at": "2026-10-01T13:00:00Z",
+    "capabilities": {
+      "files": {
+        "read": [
+          {
+            "path": "recipes/rule-000.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-001.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-002.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-003.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-004.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-005.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-006.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-007.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-008.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-009.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-010.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-011.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-012.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-013.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-014.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-015.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-016.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-017.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-018.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-019.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-020.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-021.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-022.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-023.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-024.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-025.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-026.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-027.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-028.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-029.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-030.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-031.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-032.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-033.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-034.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-035.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-036.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-037.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-038.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-039.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-040.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-041.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-042.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-043.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-044.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-045.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-046.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-047.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-048.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-049.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-050.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-051.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-052.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-053.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-054.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-055.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-056.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-057.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-058.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-059.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-060.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-061.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-062.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-063.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-064.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-065.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-066.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-067.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-068.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-069.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-070.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-071.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-072.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-073.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-074.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-075.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-076.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-077.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-078.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-079.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-080.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-081.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-082.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-083.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-084.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-085.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-086.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-087.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-088.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-089.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-090.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-091.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-092.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-093.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-094.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-095.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-096.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-097.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-098.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-099.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-100.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-101.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-102.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-103.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-104.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-105.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-106.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-107.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-108.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-109.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-110.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-111.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-112.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-113.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-114.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-115.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-116.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-117.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-118.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-119.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-120.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-121.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-122.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-123.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-124.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-125.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-126.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-127.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-128.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-129.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-130.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-131.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-132.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-133.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-134.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-135.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-136.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-137.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-138.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-139.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-140.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-141.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-142.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-143.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-144.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-145.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-146.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-147.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-148.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-149.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-150.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-151.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-152.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-153.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-154.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-155.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-156.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-157.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-158.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-159.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-160.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-161.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-162.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-163.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-164.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-165.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-166.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-167.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-168.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-169.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-170.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-171.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-172.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-173.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-174.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-175.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-176.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-177.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-178.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-179.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-180.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-181.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-182.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-183.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-184.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-185.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-186.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-187.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-188.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-189.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-190.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-191.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-192.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-193.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-194.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-195.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-196.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-197.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-198.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-199.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-200.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-201.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-202.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-203.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-204.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-205.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-206.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-207.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-208.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-209.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-210.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-211.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-212.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-213.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-214.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-215.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-216.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-217.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-218.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-219.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-220.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-221.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-222.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-223.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-224.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-225.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-226.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-227.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-228.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-229.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-230.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-231.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-232.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-233.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-234.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-235.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-236.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-237.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-238.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-239.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-240.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-241.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-242.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-243.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-244.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-245.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-246.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-247.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-248.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-249.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-250.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-251.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-252.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-253.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-254.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-255.txt",
+            "recursive": false
+          },
+          {
+            "path": "recipes/rule-256.txt",
+            "recursive": false
+          }
+        ],
+        "write": []
+      },
+      "network": [
+        "https://recipes.example"
+      ],
+      "commands": [
+        [
+          "git",
+          "status",
+          "--short"
+        ]
+      ]
+    }
+  },
+  "request": {
+    "session_id": "conf-session",
+    "task_id": "conf-task",
+    "kind": "file",
+    "action": "read",
+    "path": "recipes/soup.txt"
+  },
+  "at": "2026-10-01T12:00:00Z",
+  "workspace_id": "conf-ws",
+  "expect": {
+    "allowed": false,
+    "reason_code": "limit_exceeded"
+  }
+}

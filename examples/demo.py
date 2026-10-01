@@ -3,9 +3,10 @@
 The demo copies the example skill and workspace into a temporary directory so
 the repository fixtures stay byte-identical, then walks seven requests through
 the gate: one allowed read and six denials. Every step asserts an expected
-reason code and that no denied request ever reaches a tool. Exit code is 0
-when every expectation holds and 1 otherwise. Tools are simulated; this
-demonstrates gate wiring, not production interception.
+reason code and that no denied request ever reaches a tool. The receipts are
+then chained into a tamper-evident audit log, written to disk, and verified
+offline. Exit code is 0 when every expectation holds and 1 otherwise. Tools
+are simulated; this demonstrates gate wiring, not production interception.
 """
 
 from __future__ import annotations
@@ -25,13 +26,22 @@ for extra in (str(ROOT), str(EXAMPLES)):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
-from skilllatch import hash_skill_tree, load_json_file, load_scan_report
-
 from host_adapter import (
     GatedHost,
     make_command_stub,
     make_fetch_stub,
     make_file_tool,
+)
+
+from skilllatch import (
+    PolicyError,
+    audit_line_to_json,
+    hash_skill_tree,
+    load_audit_log,
+    load_json_file,
+    load_scan_report,
+    make_audit_line,
+    verify_audit_log,
 )
 
 AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
@@ -105,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         host, tools = build_host(WORKSPACE_ID)
         base = {"session_id": "demo-session", "task_id": "soup-question"}
         outcomes: list[dict] = []
+        audit_lines: list[dict] = []
         mismatches: list[str] = []
 
         def step(
@@ -120,6 +131,14 @@ def main(argv: list[str] | None = None) -> int:
             say(f"  request: {json.dumps(request, sort_keys=True)}")
             outcome = actor.dispatch(copy.deepcopy(request))
             outcomes.append(outcome)
+            if outcome["receipt"] is not None:
+                audit_lines.append(
+                    make_audit_line(
+                        outcome["receipt"],
+                        audit_lines[-1]["line_digest"] if audit_lines else None,
+                        len(audit_lines) + 1,
+                    )
+                )
             say(f"  decision: {outcome['reason_code']} (dispatched={outcome['dispatched']})")
             if outcome["reason_code"] != expected_code or (
                 outcome["dispatched"] != expected_dispatched
@@ -208,12 +227,48 @@ def main(argv: list[str] | None = None) -> int:
         )
         assert len(replay_tools["file"].calls) == 0
 
+        say()
+        say("Step 8: write and verify the audit log (tamper-evident, not tamper-proof)")
+        audit_path = stage / "audit.jsonl"
+        audit_path.write_text(
+            "".join(audit_line_to_json(line) + "\n" for line in audit_lines),
+            encoding="utf-8",
+            newline="\n",
+        )
+        audit_summary = "audit log verification failed"
+        try:
+            verified = verify_audit_log(load_audit_log(audit_path))
+            if verified["lines"] != 7:
+                # all seven scripted outcomes carry receipts
+                mismatches.append(
+                    f"step 8: expected 7 audit lines, verified {verified['lines']}"
+                )
+            else:
+                say(f"  wrote {audit_path.name}: {verified['lines']} chained lines")
+                tampered = copy.deepcopy(audit_lines)
+                tampered[2]["receipt"]["allowed"] = True
+                try:
+                    verify_audit_log(tampered)
+                    mismatches.append("step 8: tampered audit log verified cleanly")
+                except PolicyError as exc:
+                    if exc.code in ("receipt_digest_mismatch", "audit_chain_mismatch"):
+                        say(f"  tamper self-check: edit detected ({exc.code})")
+                        audit_summary = f"audit log {verified['lines']} lines verified"
+                    else:
+                        mismatches.append(
+                            f"step 8: unexpected tamper-detection code {exc.code}"
+                        )
+        except PolicyError as exc:
+            mismatches.append(
+                f"step 8: audit log verification failed ({exc.code}: {exc.reason})"
+            )
+
     allowed = sum(1 for o in outcomes if o["allowed"] and o["dispatched"])
     denied = sum(1 for o in outcomes if not o["allowed"])
     leaked = sum(1 for o in outcomes if not o["allowed"] and o["dispatched"])
     print(
         f"{len(outcomes)} steps: {allowed} allowed+dispatched, {denied} denied, "
-        f"{leaked} denied requests reached a tool"
+        f"{leaked} denied requests reached a tool; {audit_summary}"
     )
     if mismatches:
         for mismatch in mismatches:

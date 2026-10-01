@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from skilllatch import PolicyError, evaluate, hash_skill_tree, load_json_file
+from skilllatch.core import REASON_CODES
 
 AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 PROJECT = Path(__file__).resolve().parents[1]
@@ -428,6 +429,108 @@ class SkillLatchTests(unittest.TestCase):
         with self.assertRaises(PolicyError) as error:
             load_json_file(path)
         self.assertEqual(error.exception.code, "duplicate_json_key")
+
+    def test_ipv4_disguise_forms_are_denied(self):
+        for url in (
+            "https://2130706433/",
+            "https://127.1/",
+            "https://0x7f.0.0.1/",
+            "https://0177.0.0.1/",
+            "https://example.123/",
+            "https://010.0.0.1/",
+        ):
+            with self.subTest(url=url):
+                result = self.decide(self.request(kind="network", url=url))
+                self.assertEqual(result["reason_code"], "invalid_network_url")
+
+    def test_canonical_dotted_quad_is_allowed_when_granted(self):
+        manifest = copy.deepcopy(self.manifest)
+        grant = copy.deepcopy(self.grant)
+        manifest["capabilities"]["network"] = ["https://127.0.0.1"]
+        grant["capabilities"]["network"] = ["https://127.0.0.1"]
+        result = self.decide(
+            self.request(kind="network", url="https://127.0.0.1/path"),
+            manifest=manifest,
+            grant=grant,
+        )
+        self.assertTrue(result["allowed"])
+
+    def test_ipv6_forms_canonicalize_to_one_origin(self):
+        manifest = copy.deepcopy(self.manifest)
+        grant = copy.deepcopy(self.grant)
+        manifest["capabilities"]["network"] = ["https://[0:0:0:0:0:0:0:1]"]
+        grant["capabilities"]["network"] = ["https://[0:0:0:0:0:0:0:1]"]
+        result = self.decide(
+            self.request(kind="network", url="https://[::1]/data"),
+            manifest=manifest,
+            grant=grant,
+        )
+        self.assertTrue(result["allowed"])
+
+    def test_string_length_limit_is_enforced(self):
+        request = self.request(kind="file", action="read", path="recipes/soup.txt")
+        grant = copy.deepcopy(self.grant)
+        grant["session_id"] = "s" * 257
+        result = self.decide(request, grant=grant)
+        self.assertEqual(result["reason_code"], "limit_exceeded")
+        grant["session_id"] = "s" * 256
+        result = self.decide({**request, "session_id": "s" * 256}, grant=grant)
+        self.assertTrue(result["allowed"])
+
+    def test_path_component_limit_is_enforced(self):
+        path = "/".join(["dir"] * 33)
+        result = self.decide(self.request(kind="file", action="read", path=path))
+        self.assertEqual(result["reason_code"], "limit_exceeded")
+
+    def test_file_rule_count_limit_is_enforced(self):
+        grant = copy.deepcopy(self.grant)
+        grant["capabilities"]["files"]["read"] = [
+            {"path": f"recipes/item-{index}.txt", "recursive": False}
+            for index in range(257)
+        ]
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            grant=grant,
+        )
+        self.assertEqual(result["reason_code"], "limit_exceeded")
+
+    def test_argv_count_limit_is_enforced(self):
+        result = self.decide(
+            self.request(kind="command", argv=["tool"] + ["x"] * 64)
+        )
+        self.assertEqual(result["reason_code"], "limit_exceeded")
+
+    def test_json_nesting_limit_is_enforced(self):
+        deep = None
+        for _ in range(100):
+            deep = [deep]
+        request = self.request(
+            kind="file", action="read", path="recipes/soup.txt", extra=deep
+        )
+        with self.assertRaises(PolicyError) as error:
+            self.decide(request)
+        self.assertEqual(error.exception.code, "limit_exceeded")
+        shallow = None
+        for _ in range(99):
+            shallow = [shallow]
+        request = self.request(
+            kind="file", action="read", path="recipes/soup.txt", extra=shallow
+        )
+        result = self.decide(request)
+        self.assertNotEqual(result["reason_code"], "limit_exceeded")
+
+    def test_deny_receipt_records_declared_pin_when_grant_parse_fails(self):
+        grant = copy.deepcopy(self.grant)
+        grant["expires_at"] = "2026-10-03T11:00:01Z"  # beyond the 24h window
+        result = self.decide(
+            self.request(kind="file", action="read", path="recipes/soup.txt"),
+            grant=grant,
+        )
+        self.assertEqual(result["reason_code"], "invalid_grant_window")
+        self.assertEqual(result["receipt"]["workspace_binding"], "pinned")
+
+    def test_reason_codes_registry_contains_limit_exceeded(self):
+        self.assertIn("limit_exceeded", REASON_CODES)
 
 
 class ExampleCliTests(unittest.TestCase):

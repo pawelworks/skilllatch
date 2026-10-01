@@ -16,6 +16,7 @@ from .core import (
     hash_skill_tree,
     load_json_file,
 )
+from .receipts import load_audit_log, verify_audit_log, verify_receipt
 
 USAGE_ERROR = 64
 
@@ -53,6 +54,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="host-observed workspace identity checked against a pinned grant",
     )
+    verify = commands.add_parser(
+        "verify", help="verify one decision receipt offline"
+    )
+    verify.add_argument("--receipt", required=True, type=Path)
+    verify_log = commands.add_parser(
+        "verify-log", help="verify an audit log offline"
+    )
+    verify_log.add_argument("--log", required=True, type=Path)
     args = parser.parse_args(argv)
 
     if args.command == "digest":
@@ -62,6 +71,22 @@ def main(argv: list[str] | None = None) -> int:
         except PolicyError as exc:
             print(f"{exc.code}: {exc.reason}", file=sys.stderr)
             return 3
+
+    if args.command == "verify":
+        try:
+            outcome = verify_receipt(load_json_file(args.receipt))
+        except PolicyError as exc:
+            outcome = {"valid": False, "reason_code": exc.code, "reason": exc.reason}
+        print(json.dumps(outcome, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        return 0 if outcome["valid"] else 2
+
+    if args.command == "verify-log":
+        try:
+            outcome = verify_audit_log(load_audit_log(args.log))
+        except PolicyError as exc:
+            outcome = {"valid": False, "reason_code": exc.code, "reason": exc.reason}
+        print(json.dumps(outcome, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        return 0 if outcome["valid"] else 2
 
     when = args.at or datetime.now(UTC)
     inputs: dict[str, object] = {"manifest": None, "grant": None, "request": None}

@@ -5,32 +5,13 @@ import unittest
 from pathlib import Path
 
 from skilllatch import PolicyError, evaluate, hash_skill_tree, load_json_file
-from skilllatch.core import _parse_time, _sha256
+from skilllatch.core import REASON_CODES, _parse_time, _sha256
 
 PROJECT = Path(__file__).resolve().parents[1]
 FIXTURES = PROJECT / "conformance"
 
-REQUIRED_CODES = {
-    "allowed",
-    "capability_not_granted",
-    "skill_digest_mismatch",
-    "grant_exceeds_manifest",
-    "grant_inactive",
-    "scope_mismatch",
-    "workspace_mismatch",
-    "invalid_path",
-    "invalid_network_url",
-    "invalid_schema",
-    "unsupported_version",
-    "invalid_time",
-    "invalid_grant_window",
-    "invalid_request",
-    "invalid_skill_tree",
-    "invalid_workspace",
-    "duplicate_json_key",
-    "invalid_json_file",
-    "invalid_json_value",
-}
+# unsafe_file_path needs symlink/hard-link privileges; unit tests only.
+REQUIRED_CODES = REASON_CODES - {"unsafe_file_path"}
 
 
 def _replace_digest(value, digest):
@@ -99,6 +80,8 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(decision["reason_code"], expect["reason_code"])
         body = {key: value for key, value in receipt.items() if key != "digest"}
         self.assertEqual(_sha256(body), receipt["digest"])
+        if "expect_digest" in expect:
+            self.assertEqual(receipt["digest"], expect["expect_digest"])
         if "workspace_binding" in expect:
             self.assertEqual(receipt["workspace_binding"], expect["workspace_binding"])
 

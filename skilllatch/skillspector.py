@@ -8,6 +8,7 @@ advisory only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from .core import (
     hash_skill_tree,
     load_json_file,
 )
+
+SCAN_REASON_CODES = frozenset({"invalid_scan_report", "scan_digest_mismatch"})
 
 _CONTAINERS = ("subject", "target", "scan", "analysis", "summary")
 _SCAN_MODE_KEYS = ("scan_mode", "scanMode", "mode", "analysis_mode")
@@ -37,61 +40,74 @@ _DIGEST_KEYS = (
 _SCANNER_KEYS = ("tool", "scanner", "tool_name")
 
 
-def _find_key(
-    report: dict[str, Any], names: tuple[str, ...]
-) -> tuple[bool, Any, str | None]:
-    """Find the first case-insensitive match; top level, then one level deep."""
-    lowered = {key.lower(): key for key in report}
-    for name in names:
-        key = lowered.get(name.lower())
-        if key is not None:
-            return True, report[key], key
-    for container in _CONTAINERS:
-        key = lowered.get(container)
-        if key is None:
-            continue
-        nested = report[key]
-        if not isinstance(nested, dict):
-            continue
-        nested_lowered = {nested_key.lower(): nested_key for nested_key in nested}
-        for name in names:
-            nested_key = nested_lowered.get(name.lower())
-            if nested_key is not None:
-                return True, nested[nested_key], None
-    return False, None, None
+def _is_string(value: Any) -> bool:
+    return isinstance(value, str)
 
 
-def _first_string(
-    report: dict[str, Any], names: tuple[str, ...]
-) -> tuple[str | None, str | None]:
-    """Return the first string-valued candidate and the top-level key used.
+def _container_value(report: dict[str, Any], container: str) -> tuple[str, Any]:
+    """Exact-case container key first, then a case-variant key."""
+    if container in report:
+        return container, report[container]
+    for key, value in report.items():
+        if key.lower() == container:
+            return key, value
+    return container, None
 
-    Top-level candidates are tried in order before any container level.
+
+def _search(
+    report: dict[str, Any],
+    names: tuple[str, ...],
+    field: str,
+    keep: Callable[[Any], bool] = lambda _: True,
+) -> tuple[list[tuple[str, Any]], list[str]]:
+    """Collect candidate hits for one field, best precedence first.
+
+    Returns (hits, warnings) where hits are (source path, value) pairs. Top
+    level beats containers; exact-case keys beat case variants. Ambiguities
+    produce a warning naming the competing keys.
     """
-    lowered = {key.lower(): key for key in report}
+    lowered_names = {name.lower() for name in names}
+    exact: list[tuple[str, Any]] = []
+    variants: list[tuple[str, Any]] = []
+    nested: list[tuple[str, Any]] = []
     for name in names:
-        key = lowered.get(name.lower())
-        if key is not None and isinstance(report[key], str):
-            return report[key], key
+        if name in report and keep(report[name]):
+            exact.append((name, report[name]))
+    for key, value in report.items():
+        if key not in names and key.lower() in lowered_names and keep(value):
+            variants.append((key, value))
     for container in _CONTAINERS:
-        key = lowered.get(container)
-        if key is None:
+        ckey, cvalue = _container_value(report, container)
+        if not isinstance(cvalue, dict):
             continue
-        nested = report[key]
-        if not isinstance(nested, dict):
-            continue
-        nested_lowered = {nested_key.lower(): nested_key for nested_key in nested}
         for name in names:
-            nested_key = nested_lowered.get(name.lower())
-            if nested_key is not None and isinstance(nested[nested_key], str):
-                return nested[nested_key], None
-    return None, None
+            if name in cvalue and keep(cvalue[name]):
+                nested.append((f"{ckey}.{name}", cvalue[name]))
+        for key, value in cvalue.items():
+            if key not in names and key.lower() in lowered_names and keep(value):
+                nested.append((f"{ckey}.{key}", value))
+    warnings: list[str] = []
+    top = exact if exact else variants
+    if top:
+        if exact and variants:
+            warnings.append(
+                f"{field} matches both {exact[0][0]!r} and case-variant "
+                f"{variants[0][0]!r}; using {exact[0][0]!r}"
+            )
+        if nested:
+            warnings.append(
+                f"{field} is present at the top level and in "
+                f"{nested[0][0]!r}; using the top-level value"
+            )
+        return top, warnings
+    return nested, warnings
 
 
 def _derive_scan_mode(report: dict[str, Any]) -> str | None:
-    found, metadata, _ = _find_key(report, ("metadata",))
-    if not found or not isinstance(metadata, dict):
+    hits, _ = _search(report, ("metadata",), "metadata")
+    if not hits or not isinstance(hits[0][1], dict):
         return None
+    metadata = hits[0][1]
     lowered = {key.lower(): metadata[key] for key in metadata}
     requested = lowered.get("llm_requested")
     available = lowered.get("llm_available")
@@ -112,7 +128,7 @@ def load_scan_report(report_path: str | Path, *, skill_dir: str | Path | None = 
     code ``scan_digest_mismatch`` is raised.
     """
     try:
-        report = load_json_file(report_path)
+        report = load_json_file(report_path, max_bytes=4 * 1024 * 1024)
     except PolicyError as exc:
         raise PolicyError(
             "invalid_scan_report",
@@ -125,41 +141,52 @@ def load_scan_report(report_path: str | Path, *, skill_dir: str | Path | None = 
 
     warnings: list[str] = []
     consumed: set[str] = set()
+    sources: dict[str, str] = {}
 
-    scanner, key = _first_string(report, _SCANNER_KEYS)
-    if key is not None:
-        consumed.add(key)
-    if scanner is None:
-        scanner = "skillspector"
+    def record(field: str, source: str) -> None:
+        sources[field] = source
+        if "." not in source:
+            consumed.add(source)
 
-    found, value, key = _find_key(report, _SCAN_MODE_KEYS)
+    scanner = "skillspector"
+    hits, found_warnings = _search(report, _SCANNER_KEYS, "scanner", _is_string)
+    warnings.extend(found_warnings)
+    if hits:
+        source, scanner = hits[0]
+        record("scanner", source)
+
     scan_mode: str | None = None
-    if found:
+    hits, found_warnings = _search(report, _SCAN_MODE_KEYS, "scan mode")
+    warnings.extend(found_warnings)
+    if hits:
+        source, value = hits[0]
         if isinstance(value, str):
             scan_mode = value
-            if key is not None:
-                consumed.add(key)
+            record("scan_mode", source)
         else:
             warnings.append("scan mode is present but not a string; ignoring it")
     if scan_mode is None:
         scan_mode = _derive_scan_mode(report)
 
     coverage: dict[str, Any] = {}
-    for name in _COVERAGE_KEYS:
-        found, value, key = _find_key(report, (name,))
-        if found and isinstance(value, dict):
+    hits, found_warnings = _search(report, _COVERAGE_KEYS, "coverage")
+    warnings.extend(found_warnings)
+    if hits:
+        source, value = hits[0]
+        if isinstance(value, dict):
             coverage = value
-            if key is not None:
-                consumed.add(key)
-            break
+            record("coverage", source)
+        else:
+            warnings.append("coverage is present but not an object; ignoring it")
 
     subject_digest: str | None = None
-    raw_digest, key = _first_string(report, _DIGEST_KEYS)
-    if raw_digest is not None:
+    hits, found_warnings = _search(report, _DIGEST_KEYS, "subject digest", _is_string)
+    warnings.extend(found_warnings)
+    if hits:
+        source, raw_digest = hits[0]
         if _DIGEST_RE.fullmatch(raw_digest):
             subject_digest = raw_digest
-            if key is not None:
-                consumed.add(key)
+            record("subject_digest", source)
         else:
             warnings.append(
                 "report carries a malformed subject digest; treating it as absent"
@@ -186,6 +213,7 @@ def load_scan_report(report_path: str | Path, *, skill_dir: str | Path | None = 
         "coverage": coverage,
         "subject_digest": subject_digest,
         "digest_match": digest_match,
+        "sources": sources,
         "metadata": {key: value for key, value in report.items() if key not in consumed},
         "warnings": warnings,
     }

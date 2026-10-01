@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "SkillLatch capability manifest v1. Documentation-grade: the reference parser in skilllatch/core.py is authoritative. Known looseness vs the parser: (1) the RELPATH pattern does not reject Windows device names or components with a trailing space or dot; (2) network items are constrained only by the origin-only pattern, not the parser's full host rules (HTTPS scheme, ASCII/punycode, DNS label shape, IPv4 canonical dotted-quad, IPv6 canonicalization, port rules, host length); (3) JSON Schema 'integer' accepts 1.0, the parser requires a type-exact int; (4) duplicate object keys and nonfinite numbers are invisible to JSON Schema; (5) the 256/256/64 capability caps are not expressed. The capabilities object is inlined (no $defs/$ref) so every schema file stays self-contained for editor tooling.",
+  "type": "object",
+  "required": ["version", "skill", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "integer", "const": 1},
+    "skill": {
+      "type": "object",
+      "required": ["name", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["files", "network", "commands"],
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "object",
+          "required": ["read", "write"],
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "recursive"],
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\\\:*?<>|\"\\u0000-\\u001F\\u007F]+$"
+                  },
+                  "recursive": {"type": "boolean"}
+                }
+              }
+            },
+            "write": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "recursive"],
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\\\:*?<>|\"\\u0000-\\u001F\\u007F]+$"
+                  },
+                  "recursive": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
+        "network": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^https://[^/\\\\?#\\s]+$"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

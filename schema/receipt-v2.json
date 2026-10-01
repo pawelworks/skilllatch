@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "SkillLatch decision receipt v2. Documentation-grade: the reference parser in skilllatch/core.py is authoritative. Known looseness vs the parser and verifier: (1) digest self-consistency (digest == sha256 of the canonical receipt minus digest) is not expressible — use skilllatch.receipts.verify_receipt; (2) calendar validity of evaluated_at is not verified beyond the pattern; (3) the reason_code enum accepts codes such as duplicate_json_key that the evaluation pipeline only raises, never records (they appear only in CLI-synthesized denial receipts); (4) duplicate object keys and nonfinite numbers are invisible to JSON Schema; (5) JSON Schema 'integer' accepts 1.0, the parser requires a type-exact int.",
+  "type": "object",
+  "required": ["version", "allowed", "reason_code", "reason", "evaluated_at", "skill_digest", "workspace_id", "workspace_binding", "manifest_hash", "grant_hash", "request_hash", "digest"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "integer", "const": 2},
+    "allowed": {"type": "boolean"},
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "allowed",
+        "capability_not_granted",
+        "duplicate_json_key",
+        "grant_exceeds_manifest",
+        "grant_inactive",
+        "invalid_grant_window",
+        "invalid_json_file",
+        "invalid_json_value",
+        "invalid_network_url",
+        "invalid_path",
+        "invalid_request",
+        "invalid_schema",
+        "invalid_skill_tree",
+        "invalid_time",
+        "invalid_workspace",
+        "limit_exceeded",
+        "scope_mismatch",
+        "skill_digest_mismatch",
+        "unsafe_file_path",
+        "unsupported_version",
+        "workspace_mismatch"
+      ]
+    },
+    "reason": {"type": "string", "minLength": 1},
+    "evaluated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    },
+    "skill_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "workspace_id": {
+      "type": ["string", "null"],
+      "$comment": "Deliberately unconstrained beyond string|null: the receipt echoes the host-supplied workspace identity verbatim, even one the engine would reject as policy input, because it binds what was supplied."
+    },
+    "workspace_binding": {"enum": ["pinned", "unpinned", "none"]},
+    "manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "grant_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "request_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

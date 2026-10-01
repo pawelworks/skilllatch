@@ -28,6 +28,45 @@ _WINDOWS_DEVICE_RE = re.compile(
 )
 _MAX_GRANT_LIFETIME = timedelta(hours=24)
 _FILE_ACTIONS = ("read", "write")
+_MAX_JSON_DEPTH = 100
+_MAX_JSON_INPUT_BYTES = 1024 * 1024
+_MAX_STRING_LENGTH = 256
+_MAX_ORIGIN_LENGTH = 2048
+_MAX_PATH_LENGTH = 512
+_MAX_PATH_PARTS = 32
+_MAX_FILE_RULES = 256
+_MAX_NETWORK_ORIGINS = 256
+_MAX_COMMANDS = 64
+_MAX_ARGV = 64
+_MAX_SKILL_FILES = 10000
+_MAX_SKILL_BYTES = 64 * 1024 * 1024
+
+# Closed registry; adding a code requires SPEC + conformance updates.
+REASON_CODES = frozenset(
+    {
+        "allowed",
+        "capability_not_granted",
+        "skill_digest_mismatch",
+        "grant_exceeds_manifest",
+        "grant_inactive",
+        "scope_mismatch",
+        "workspace_mismatch",
+        "invalid_path",
+        "invalid_network_url",
+        "invalid_schema",
+        "unsupported_version",
+        "invalid_time",
+        "invalid_grant_window",
+        "invalid_request",
+        "invalid_skill_tree",
+        "invalid_workspace",
+        "unsafe_file_path",
+        "invalid_json_value",
+        "duplicate_json_key",
+        "invalid_json_file",
+        "limit_exceeded",
+    }
+)
 
 
 class PolicyError(ValueError):
@@ -40,35 +79,40 @@ class PolicyError(ValueError):
 
 
 def _canonical_bytes(value: Any) -> bytes:
-    def validate(item: Any) -> None:
-        if item is None or type(item) in (bool, int):
-            return
-        if type(item) is str:
-            item.encode("utf-8")
-            return
-        if type(item) is float:
-            if not math.isfinite(item):
-                raise PolicyError(
-                    "invalid_json_value", "nonfinite numbers are invalid JSON inputs"
-                )
-            return
-        if type(item) is list:
-            for child in item:
-                validate(child)
-            return
-        if type(item) is dict:
-            for key, child in item.items():
-                if type(key) is not str:
-                    raise PolicyError(
-                        "invalid_json_value", "JSON object keys must be strings"
-                    )
-                key.encode("utf-8")
-                validate(child)
-            return
-        raise PolicyError("invalid_json_value", "input must contain JSON values")
-
+    # Iterative walk: validation depth must not depend on the document, and
+    # nesting is capped so parse outcomes are portable across hosts.
+    stack = [(value, 1)]
     try:
-        validate(value)
+        while stack:
+            item, depth = stack.pop()
+            if item is None or type(item) in (bool, int):
+                continue
+            if type(item) is str:
+                item.encode("utf-8")
+                continue
+            if type(item) is float:
+                if not math.isfinite(item):
+                    raise PolicyError(
+                        "invalid_json_value", "nonfinite numbers are invalid JSON inputs"
+                    )
+                continue
+            if depth > _MAX_JSON_DEPTH:
+                raise PolicyError(
+                    "limit_exceeded", "JSON nesting exceeds 100 levels"
+                )
+            if type(item) is list:
+                stack.extend((child, depth + 1) for child in item)
+                continue
+            if type(item) is dict:
+                for key, child in item.items():
+                    if type(key) is not str:
+                        raise PolicyError(
+                            "invalid_json_value", "JSON object keys must be strings"
+                        )
+                    key.encode("utf-8")
+                    stack.append((child, depth + 1))
+                continue
+            raise PolicyError("invalid_json_value", "input must contain JSON values")
         return json.dumps(
             value,
             sort_keys=True,
@@ -106,20 +150,29 @@ def _finite_float(raw: str) -> float:
     return value
 
 
-def load_json_file(path: str | Path) -> Any:
+def _strict_json_loads(text: str) -> Any:
+    """Parse JSON with SkillLatch strictness: unique keys, finite floats only."""
+    return json.loads(
+        text,
+        object_pairs_hook=_unique_object,
+        parse_float=_finite_float,
+        parse_constant=lambda _: (_ for _ in ()).throw(
+            PolicyError(
+                "invalid_json_value", "NaN and Infinity are invalid JSON"
+            )
+        ),
+    )
+
+
+def load_json_file(path: str | Path, *, max_bytes: int = _MAX_JSON_INPUT_BYTES) -> Any:
     """Read strict UTF-8 JSON, rejecting duplicate object keys and NaN values."""
     try:
         with open(path, "r", encoding="utf-8") as stream:
-            value = json.load(
-                stream,
-                object_pairs_hook=_unique_object,
-                parse_float=_finite_float,
-                parse_constant=lambda _: (_ for _ in ()).throw(
-                    PolicyError(
-                        "invalid_json_value", "NaN and Infinity are invalid JSON"
-                    )
-                ),
-            )
+            if os.fstat(stream.fileno()).st_size > max_bytes:
+                raise PolicyError(
+                    "limit_exceeded", f"JSON input exceeds {max_bytes} bytes"
+                )
+            value = _strict_json_loads(stream.read())
         _canonical_bytes(value)
         return value
     except PolicyError:
@@ -144,7 +197,7 @@ def _object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
     return value
 
 
-def _string(value: Any, label: str) -> str:
+def _string(value: Any, label: str, max_length: int = _MAX_STRING_LENGTH) -> str:
     if (
         not isinstance(value, str)
         or not value
@@ -153,6 +206,10 @@ def _string(value: Any, label: str) -> str:
         raise PolicyError(
             "invalid_schema",
             f"{label} must be a nonempty string without control characters",
+        )
+    if len(value) > max_length:
+        raise PolicyError(
+            "limit_exceeded", f"{label} exceeds {max_length} characters"
         )
     return value
 
@@ -172,10 +229,12 @@ def _digest(value: Any, label: str) -> str:
 
 
 def _relative_path(value: Any, label: str) -> tuple[str, ...]:
-    path = _string(value, label)
+    path = _string(value, label, _MAX_PATH_LENGTH)
     if path.startswith("/") or any(char in path for char in '\\:*?<>|"'):
         raise PolicyError("invalid_path", f"{label} must be a portable relative path")
     parts = tuple(path.split("/"))
+    if len(parts) > _MAX_PATH_PARTS:
+        raise PolicyError("limit_exceeded", "path exceeds 32 components")
     if any(
         part in ("", ".", "..")
         or part.endswith((" ", "."))
@@ -197,7 +256,11 @@ def _file_rule(value: Any) -> tuple[tuple[str, ...], bool]:
 
 
 def _origin(value: Any, *, declaration: bool) -> str:
-    raw = _string(value, "network origin" if declaration else "network URL")
+    raw = _string(
+        value,
+        "network origin" if declaration else "network URL",
+        _MAX_ORIGIN_LENGTH,
+    )
     if raw != raw.strip() or "\\" in raw:
         raise PolicyError(
             "invalid_network_url", "network URL contains forbidden characters"
@@ -238,17 +301,45 @@ def _origin(value: Any, *, declaration: bool) -> str:
     if not ascii_host or any(c.isspace() for c in ascii_host) or port == 0:
         raise PolicyError("invalid_network_url", "network host is invalid")
     if ":" in ascii_host:
+        # Canonicalize IPv6 so "::1" and "0:0:0:0:0:0:0:1" share one origin.
         try:
-            ipaddress.IPv6Address(ascii_host)
+            ascii_host = f"[{ipaddress.IPv6Address(ascii_host).compressed}]"
         except ValueError as exc:
             raise PolicyError(
                 "invalid_network_url", "network IPv6 host is invalid"
             ) from exc
-        ascii_host = f"[{ascii_host}]"
-    elif len(ascii_host) > 253 or any(
-        not _DNS_LABEL_RE.fullmatch(label) for label in ascii_host.split(".")
-    ):
-        raise PolicyError("invalid_network_url", "network host is invalid")
+    else:
+        labels = ascii_host.split(".")
+        if all(c.isdigit() or c == "." for c in ascii_host):
+            # Digit/dot-only hosts must be canonical dotted-quad IPv4; integer,
+            # octal, hex, and shortened forms are disguise vectors.
+            if len(labels) != 4 or any(
+                not label.isdigit()
+                or (label != "0" and label.startswith("0"))
+                or int(label) > 255
+                for label in labels
+            ):
+                raise PolicyError(
+                    "invalid_network_url",
+                    "numeric host must be a canonical dotted-quad IPv4 address",
+                )
+            ascii_host = str(ipaddress.IPv4Address(ascii_host))
+        else:
+            for label in labels:
+                if label.startswith("0x"):
+                    raise PolicyError(
+                        "invalid_network_url",
+                        "network host must not use hex labels",
+                    )
+                if label.isdigit():
+                    raise PolicyError(
+                        "invalid_network_url",
+                        "DNS host labels must not be all digits",
+                    )
+        if len(ascii_host) > 253 or any(
+            not _DNS_LABEL_RE.fullmatch(label) for label in ascii_host.split(".")
+        ):
+            raise PolicyError("invalid_network_url", "network host is invalid")
     if port == 443:
         port = None
     return f"https://{ascii_host}" + (f":{port}" if port is not None else "")
@@ -257,6 +348,8 @@ def _origin(value: Any, *, declaration: bool) -> str:
 def _argv(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list) or not value:
         raise PolicyError("invalid_schema", "command argv must be a nonempty array")
+    if len(value) > _MAX_ARGV:
+        raise PolicyError("limit_exceeded", "command argv exceeds 64 arguments")
     return tuple(_string(part, "command argument") for part in value)
 
 
@@ -267,9 +360,17 @@ def _capabilities(value: Any) -> dict[str, Any]:
     for action in _FILE_ACTIONS:
         if not isinstance(files[action], list):
             raise PolicyError("invalid_schema", f"files.{action} must be an array")
+        if len(files[action]) > _MAX_FILE_RULES:
+            raise PolicyError(
+                "limit_exceeded", f"files.{action} exceeds 256 file rules"
+            )
         normalized["files"][action] = {_file_rule(rule) for rule in files[action]}
     if not isinstance(caps["network"], list) or not isinstance(caps["commands"], list):
         raise PolicyError("invalid_schema", "network and commands must be arrays")
+    if len(caps["network"]) > _MAX_NETWORK_ORIGINS:
+        raise PolicyError("limit_exceeded", "network exceeds 256 origins")
+    if len(caps["commands"]) > _MAX_COMMANDS:
+        raise PolicyError("limit_exceeded", "commands exceed 64 entries")
     normalized["network"] = {
         _origin(origin, declaration=True) for origin in caps["network"]
     }
@@ -360,6 +461,7 @@ def hash_skill_tree(skill_dir: str | Path) -> str:
                 "invalid_skill_tree", "skill directory must be a real directory"
             )
         inventory: list[dict[str, Any]] = []
+        total_bytes = 0
 
         def on_walk_error(error: OSError) -> None:
             raise error
@@ -405,6 +507,15 @@ def hash_skill_tree(skill_dir: str | Path) -> str:
                 inventory.append(
                     {"path": relative, "size": size, "sha256": content_hash.hexdigest()}
                 )
+                if len(inventory) > _MAX_SKILL_FILES:
+                    raise PolicyError(
+                        "limit_exceeded", "skill tree exceeds 10000 files"
+                    )
+                total_bytes += size
+                if total_bytes > _MAX_SKILL_BYTES:
+                    raise PolicyError(
+                        "limit_exceeded", "skill tree exceeds 64 MiB"
+                    )
         inventory.sort(key=lambda item: item["path"])
         return _sha256({"schema": "skilllatch.tree.v1", "files": inventory})
     except PolicyError:
@@ -474,17 +585,20 @@ def _safe_workspace_path(workspace: str | Path, path: tuple[str, ...]) -> None:
         resolved_target = current.resolve(strict=False)
         if not resolved_target.is_relative_to(resolved_root):
             raise PolicyError("unsafe_file_path", "file path escapes workspace")
+        # One lstat for the hard-link check: a separate is_file()/lstat()
+        # pair would leave an intra-check stat race.
         try:
-            if current.is_file() and current.lstat().st_nlink != 1:
-                raise PolicyError(
-                    "unsafe_file_path", "file has multiple hard links"
-                )
-        except PolicyError:
-            raise
+            info = current.lstat()
+        except FileNotFoundError:
+            info = None  # target does not exist yet
         except OSError as exc:
             raise PolicyError(
                 "unsafe_file_path", "file path could not be checked safely"
             ) from exc
+        if info is not None and stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            raise PolicyError(
+                "unsafe_file_path", "file has multiple hard links"
+            )
     except PolicyError:
         raise
     except OSError as exc:
@@ -563,6 +677,28 @@ def _decision(
         "reason": reason,
         "receipt": receipt,
     }
+
+
+def _declared_workspace_pin(grant: Any) -> str | None:
+    """Tolerantly peek at a v2 grant's declared pin for deny-receipt binding.
+
+    Used only when grant parsing raised before returning the pin, so that
+    ``pinned`` means "the grant declares a pin" on allow and deny receipts
+    alike. Returns None for anything but a well-formed declared pin.
+    """
+    if not isinstance(grant, dict):
+        return None
+    version = grant.get("version")
+    if type(version) is not int or version != 2:
+        return None
+    pin = grant.get("workspace_id")
+    if (
+        not isinstance(pin, str)
+        or not pin
+        or any(ord(c) < 32 or ord(c) == 127 for c in pin)
+    ):
+        return None
+    return pin
 
 
 def evaluate(
@@ -650,6 +786,8 @@ def evaluate(
                 "capability_not_granted", "exact command argv is not granted"
             )
     except PolicyError as exc:
+        if grant_workspace_id is None:
+            grant_workspace_id = _declared_workspace_pin(grant)
         if grant_workspace_id is not None:
             binding = "pinned"
         elif workspace_id is not None:

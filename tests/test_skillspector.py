@@ -46,6 +46,15 @@ class ScanReportTests(unittest.TestCase):
             {"files_scanned": 1, "files_total": 1, "is_complete": True},
         )
         self.assertTrue(verified["digest_match"])
+        self.assertEqual(
+            verified["sources"],
+            {
+                "scanner": "tool",
+                "scan_mode": "scan_mode",
+                "coverage": "coverage",
+                "subject_digest": "subject_digest",
+            },
+        )
         for key in ("_note", "skill", "risk_assessment", "components", "issues"):
             self.assertIn(key, verified["metadata"])
         self.assertEqual(
@@ -83,6 +92,15 @@ class ScanReportTests(unittest.TestCase):
         self.assertEqual(result["coverage"], {"files_scanned": 3})
         self.assertEqual(result["scanner"], "other-engine")
         self.assertTrue(result["digest_match"])
+        self.assertEqual(
+            result["sources"],
+            {
+                "scanner": "scanner",
+                "scan_mode": "scanMode",
+                "coverage": "analysis_coverage",
+                "subject_digest": "target_digest",
+            },
+        )
 
     def test_container_level_fields_are_found(self):
         path = self.write_report(
@@ -91,6 +109,41 @@ class ScanReportTests(unittest.TestCase):
         result = load_scan_report(path, skill_dir=self.skill)
         self.assertEqual(result["scan_mode"], "deep")
         self.assertTrue(result["digest_match"])
+        self.assertEqual(
+            result["sources"],
+            {"scan_mode": "analysis.mode", "subject_digest": "analysis.subject_digest"},
+        )
+
+    def test_exact_case_key_wins_over_case_variant_with_warning(self):
+        path = self.write_report({"mode": "static", "Mode": "deep"})
+        result = load_scan_report(path)
+        self.assertEqual(result["scan_mode"], "static")
+        self.assertEqual(result["sources"], {"scan_mode": "mode"})
+        self.assertTrue(
+            any("case-variant" in warning and "'Mode'" in warning
+                for warning in result["warnings"])
+        )
+
+    def test_top_level_field_wins_over_container_with_warning(self):
+        path = self.write_report(
+            {"mode": "static", "analysis": {"mode": "deep"}}
+        )
+        result = load_scan_report(path)
+        self.assertEqual(result["scan_mode"], "static")
+        self.assertEqual(result["sources"], {"scan_mode": "mode"})
+        self.assertTrue(
+            any("top level" in warning and "analysis.mode" in warning
+                for warning in result["warnings"])
+        )
+
+    def test_non_object_coverage_is_a_warning(self):
+        path = self.write_report({"coverage": "not-an-object"})
+        result = load_scan_report(path)
+        self.assertEqual(result["coverage"], {})
+        self.assertEqual(result["sources"], {})
+        self.assertIn(
+            "coverage is present but not an object; ignoring it", result["warnings"]
+        )
 
     def test_scan_mode_derivation_from_llm_metadata(self):
         for requested, available, expected in (

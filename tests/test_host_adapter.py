@@ -7,14 +7,14 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from skilllatch import hash_skill_tree
+from skilllatch import build_context, hash_skill_tree
 from skilllatch.core import _sha256
 
 AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "examples"))
 
-from host_adapter import (  # noqa: E402
+from host_adapter import (
     GatedHost,
     RecordingTool,
     make_command_stub,
@@ -257,6 +257,95 @@ class GatedHostTests(unittest.TestCase):
         self.assertTrue(outcome["dispatched"])
         self.assertEqual(outcome["tool_result"]["stdout"], "ok\n")
         self.assertEqual(stub.calls, [{"argv": ["git", "status", "--short"]}])
+
+    def make_context(self, **overrides):
+        options = {
+            "session_id": "session-1",
+            "task_id": "task-1",
+            "workspace_id": "test-workspace",
+            "skills": [
+                {
+                    "digest": self.manifest["skill"]["digest"],
+                    "source": {"type": "local_dir"},
+                    "name": "test-skill",
+                }
+            ],
+            "project_instructions": [
+                {"label": "AGENTS.md", "digest": "sha256:" + "1" * 64}
+            ],
+            "tool": {"name": "file", "schema_digest": "sha256:" + "2" * 64},
+            "grant_hash": "sha256:" + "3" * 64,
+            "at": AT,
+        }
+        options.update(overrides)
+        return build_context(**options)
+
+    def test_context_envelope_is_attached_on_allow_and_deny(self):
+        context = self.make_context()
+        host = self.make_host(context=context)
+        host.register_tool("file", make_file_tool(self.workspace))
+        allowed = host.dispatch(self.read_request())
+        self.assertTrue(allowed["allowed"])
+        self.assertEqual(allowed["context"], context)
+        denied = host.dispatch(self.read_request("private.txt"))
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["context"], context)
+        errored = host.dispatch({**self.read_request(), "extra": float("inf")})
+        self.assertEqual(errored["error"], "policy_error")
+        self.assertEqual(errored["context"], context)
+
+    def test_context_is_frozen_against_caller_mutation(self):
+        context = self.make_context()
+        host = self.make_host(context=context)
+        host.register_tool("file", make_file_tool(self.workspace))
+        context["session_id"] = "mutated"
+        context["skills"].append(
+            {"digest": "sha256:" + "9" * 64, "source": {"type": "local_dir"}}
+        )
+        first = host.dispatch(self.read_request())
+        self.assertEqual(first["context"]["session_id"], "session-1")
+        self.assertEqual(len(first["context"]["skills"]), 1)
+        first["context"]["session_id"] = "mutated-again"
+        second = host.dispatch(self.read_request())
+        self.assertEqual(second["context"]["session_id"], "session-1")
+        self.assertEqual(host.context["session_id"], "session-1")
+
+    def test_per_call_context_overrides_constructor_value(self):
+        constructor_context = self.make_context()
+        call_context = self.make_context(
+            tool={"name": "other-tool", "schema_digest": "sha256:" + "4" * 64}
+        )
+        host = self.make_host(context=constructor_context)
+        host.register_tool("file", make_file_tool(self.workspace))
+        overridden = host.dispatch(self.read_request(), context=call_context)
+        self.assertEqual(overridden["context"], call_context)
+        fallback = host.dispatch(self.read_request())
+        self.assertEqual(fallback["context"], constructor_context)
+        suppressed = host.dispatch(self.read_request(), context=None)
+        self.assertIsNone(suppressed["context"])
+
+    def test_context_defaults_to_none(self):
+        host = self.make_host()
+        host.register_tool("file", make_file_tool(self.workspace))
+        outcome = host.dispatch(self.read_request())
+        self.assertIsNone(outcome["context"])
+        self.assertIsNone(host.context)
+
+    def test_advisory_behavior_is_unchanged_by_context(self):
+        advisory = {
+            "schema": "skilllatch.scan_advisory.v1",
+            "scanner": "skillspector",
+            "report_hash": "sha256:" + "5" * 64,
+        }
+        context = self.make_context()
+        host = self.make_host(advisory=advisory, context=context)
+        host.register_tool("file", make_file_tool(self.workspace))
+        outcome = host.dispatch(self.read_request())
+        self.assertEqual(outcome["advisory"], advisory)
+        self.assertEqual(outcome["context"], context)
+        advisory["scanner"] = "mutated"
+        followup = host.dispatch(self.read_request())
+        self.assertEqual(followup["advisory"]["scanner"], "skillspector")
 
 
 if __name__ == "__main__":

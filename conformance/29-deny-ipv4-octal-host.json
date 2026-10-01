@@ -1,6 +1,6 @@
 {
-  "name": "21-deny-workspace-mismatch",
-  "description": "A grant pinned to ws-a evaluated with host workspace id ws-b is denied.",
+  "name": "29-deny-ipv4-octal-host",
+  "description": "A leading-zero (octal-lookalike) IPv4 host is denied.",
   "setup": {
     "skill_files": {
       "SKILL.md": "# Conformance skill\n"
@@ -48,7 +48,7 @@
     "session_id": "conf-session",
     "task_id": "conf-task",
     "skill_digest": "__SKILL_DIGEST__",
-    "workspace_id": "ws-a",
+    "workspace_id": "conf-ws",
     "issued_at": "2026-10-01T11:00:00Z",
     "expires_at": "2026-10-01T13:00:00Z",
     "capabilities": {
@@ -76,15 +76,13 @@
   "request": {
     "session_id": "conf-session",
     "task_id": "conf-task",
-    "kind": "file",
-    "action": "read",
-    "path": "recipes/soup.txt"
+    "kind": "network",
+    "url": "https://0177.0.0.1/"
   },
   "at": "2026-10-01T12:00:00Z",
-  "workspace_id": "ws-b",
+  "workspace_id": "conf-ws",
   "expect": {
     "allowed": false,
-    "reason_code": "workspace_mismatch",
-    "expect_digest": "sha256:2543dc988ffc7217d989f207bd1ce13168f38dcfec3a0cc0af62200c6fab3251"
+    "reason_code": "invalid_network_url"
   }
 }

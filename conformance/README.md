@@ -33,6 +33,10 @@ they describe temporary file trees and JSON inputs, never real skills.
 - `at` is an RFC3339 UTC timestamp; `workspace_id` is the host-observed
   workspace identity passed to `evaluate` (use `null` to omit it).
 - `expect.workspace_binding`, when present, is also asserted on the receipt.
+- `expect.expect_digest`, when present, pins the exact receipt `digest`
+  (currently in `01-allow-read-file`, `04-allow-pinned-workspace`, and
+  `21-deny-workspace-mismatch`). Regenerate the pins only on a deliberate
+  receipt-format change, never to silence a failure.
 
 The runner evaluates each case twice, requires byte-identical receipts, and
 recomputes the receipt digest over the canonical receipt minus its `digest`

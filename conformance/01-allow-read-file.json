@@ -84,6 +84,7 @@
   "workspace_id": "conf-ws",
   "expect": {
     "allowed": true,
-    "reason_code": "allowed"
+    "reason_code": "allowed",
+    "expect_digest": "sha256:11331c5eabc0373d47e39720cab6a770f20da6d7b038e5fe85d999e783ce2a8e"
   }
 }
